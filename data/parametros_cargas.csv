@@ -1,0 +1,6 @@
+id_carga,tipo_carga,fator_risco,fator_seguro
+1,carga_geral,1.00,0.003
+2,fragil,1.15,0.005
+3,alto_valor,1.25,0.008
+4,refrigerada,1.40,0.006
+5,pesada,1.30,0.004

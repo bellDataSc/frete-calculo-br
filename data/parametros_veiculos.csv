@@ -1,0 +1,6 @@
+id_veiculo,tipo_veiculo,capacidade_kg,custo_km_base,frete_minimo
+1,utilitario,1000,2.80,80
+2,vuc,3000,3.70,120
+3,toco,6000,4.80,180
+4,truck,14000,6.50,280
+5,carreta,27000,8.50,450
