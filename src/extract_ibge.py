@@ -2,10 +2,23 @@ import requests
 import pandas as pd
 import os
 import time
+from io import StringIO
 
 IBGE_URL = "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
-BRASILIO_URL = "https://brasil.io/api/dataset/divida-ativa/municipios/data/?format=json&page_size=10000"
-BRASILIO_CSV = "https://raw.githubusercontent.com/kelvins/municipios-brasileiros/main/csv/municipios.csv"
+BRASIL_API_URL = "https://brasilapi.com.br/api/ibge/municipios/v1/{uf}?providers=ibge"
+UFS = [
+    "AC","AL","AM","AP","BA","CE","DF","ES","GO","MA",
+    "MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN",
+    "RO","RR","RS","SC","SE","SP","TO"
+]
+REGIAO_MAP = {
+    "AC":"Norte","AM":"Norte","AP":"Norte","PA":"Norte","RO":"Norte","RR":"Norte","TO":"Norte",
+    "AL":"Nordeste","BA":"Nordeste","CE":"Nordeste","MA":"Nordeste","PB":"Nordeste",
+    "PE":"Nordeste","PI":"Nordeste","RN":"Nordeste","SE":"Nordeste",
+    "DF":"Centro-Oeste","GO":"Centro-Oeste","MS":"Centro-Oeste","MT":"Centro-Oeste",
+    "ES":"Sudeste","MG":"Sudeste","RJ":"Sudeste","SP":"Sudeste",
+    "PR":"Sul","RS":"Sul","SC":"Sul"
+}
 OUT_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "municipios_ibge.csv")
 MAX_RETRIES = 3
 RETRY_DELAY = 5
@@ -40,19 +53,29 @@ def _extract_from_ibge():
     raise RuntimeError(f"IBGE API falhou apos {MAX_RETRIES} tentativas: {last_error}")
 
 
-def _extract_from_github_mirror():
-    print("Usando mirror GitHub (kelvins/municipios-brasileiros)...")
-    response = requests.get(BRASILIO_CSV, timeout=30)
-    response.raise_for_status()
-    from io import StringIO
-    df_raw = pd.read_csv(StringIO(response.text))
-    df = pd.DataFrame({
-        "codigo_municipio_ibge": df_raw["codigo_ibge"].astype(str),
-        "nome_municipio": df_raw["nome"],
-        "uf": df_raw["uf"],
-        "regiao": df_raw["uf"]
-    })
-    return df
+def _extract_from_brasilapi():
+    print("Usando BrasilAPI (brasilapi.com.br) por UF...")
+    rows = []
+    for uf in UFS:
+        url = BRASIL_API_URL.format(uf=uf)
+        try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            municipios = resp.json()
+            for m in municipios:
+                rows.append({
+                    "codigo_municipio_ibge": str(m["codigo_ibge"]),
+                    "nome_municipio": m["nome"],
+                    "uf": uf,
+                    "regiao": REGIAO_MAP.get(uf, "")
+                })
+            print(f"  {uf}: {len(municipios)} municipios")
+        except Exception as e:
+            print(f"  {uf}: erro - {e}")
+        time.sleep(0.2)
+    if len(rows) == 0:
+        raise RuntimeError("BrasilAPI nao retornou nenhum municipio")
+    return pd.DataFrame(rows)
 
 
 def extract_municipios():
@@ -63,22 +86,22 @@ def extract_municipios():
         df = _extract_from_ibge()
         source = "IBGE Localidades API"
     except RuntimeError as e:
-        print(f"\nIBGE API indisponivel. Motivo: {e}")
-        print("Tentando mirror publico (GitHub/kelvins)...\n")
+        print(f"\nIBGE API indisponivel: {e}")
+        print("Tentando BrasilAPI...\n")
         try:
-            df = _extract_from_github_mirror()
-            source = "mirror GitHub kelvins/municipios-brasileiros"
+            df = _extract_from_brasilapi()
+            source = "BrasilAPI por UF"
         except Exception as e2:
             raise RuntimeError(
                 f"Todas as fontes falharam.\n"
                 f"IBGE: {e}\n"
-                f"Mirror: {e2}\n\n"
+                f"BrasilAPI: {e2}\n\n"
                 f"Tente manualmente:\n"
-                f"  curl '{IBGE_URL}' | head -c 200"
+                f"  curl 'https://brasilapi.com.br/api/ibge/municipios/v1/SP?providers=ibge'"
             )
 
     df.to_csv(OUT_PATH, index=False)
-    print(f"{len(df)} municipios salvos em {OUT_PATH}")
+    print(f"\n{len(df)} municipios salvos em {OUT_PATH}")
     print(f"Fonte: {source}")
     return df
 
