@@ -6,7 +6,7 @@ from src.validators import validar_entrada
 
 st.set_page_config(page_title="frete-calculo-br", layout="wide")
 st.title("Calculadora de Frete Intermunicipal")
-st.caption("Estimativa baseada em dados publicos brasileiros — IBGE / REGIC / DNIT SICRO")
+st.caption("Estimativa baseada em dados publicos brasileiros — IBGE / OSRM / DNIT SICRO")
 
 municipio_df = load_municipios()
 distancias_df = load_distancias()
@@ -14,6 +14,10 @@ veiculos_df = load_veiculos()
 cargas_df = load_cargas()
 modal_df = load_modal()
 adicionais = load_adicionais()
+
+if municipio_df.empty:
+    st.error("Arquivo municipios_ibge.csv nao encontrado. Execute: python src/extract_ibge.py")
+    st.stop()
 
 tab1, tab2, tab3 = st.tabs(["Simulador", "Distancias", "Parametros"])
 
@@ -54,42 +58,46 @@ with tab1:
             for e in erros:
                 st.error(e)
         else:
-            resultado = calcular_frete(
-                origem_row, destino_row,
-                modal_selecionado, veiculo_selecionado, carga_selecionada,
-                peso_kg, volume_m3, valor_carga,
-                distancias_df, veiculos_df, cargas_df, modal_df, adicionais
-            )
+            with st.spinner("Calculando distancia e frete..."):
+                resultado = calcular_frete(
+                    origem_row, destino_row,
+                    modal_selecionado, veiculo_selecionado, carga_selecionada,
+                    peso_kg, volume_m3, valor_carga,
+                    distancias_df, veiculos_df, cargas_df, modal_df, adicionais
+                )
 
             st.subheader("Resultado")
+            st.caption(f"Fonte da distancia: {resultado['fonte_distancia']}")
+
             col_r1, col_r2 = st.columns(2)
             with col_r1:
                 st.metric("Distancia (km)", f"{resultado['distancia_km']:.1f}")
+                st.metric("Tempo estimado", resultado['duracao_h'])
                 st.metric("Custo Base (R$)", f"{resultado['custo_base']:.2f}")
                 st.metric("Seguro (R$)", f"{resultado['seguro']:.2f}")
-                st.metric("Adicional Peso (R$)", f"{resultado['adicional_peso']:.2f}")
             with col_r2:
+                st.metric("Adicional Peso (R$)", f"{resultado['adicional_peso']:.2f}")
                 st.metric("Adicional Risco (R$)", f"{resultado['adicional_risco']:.2f}")
                 st.metric("Taxa Administrativa (R$)", f"{resultado['taxa_administrativa']:.2f}")
                 st.metric("Frete Estimado (R$)", f"{resultado['frete_estimado']:.2f}")
 
             st.subheader("Memoria de Calculo")
-            st.dataframe(pd.DataFrame(resultado["memoria_calculo"]))
+            st.dataframe(pd.DataFrame(resultado["memoria_calculo"]), use_container_width=True)
 
 with tab2:
     st.subheader("Consulta de Distancias")
     if not distancias_df.empty:
         st.dataframe(distancias_df.head(100))
     else:
-        st.info("Arquivo distancias_regic.csv nao encontrado em data/. Consulte instructions/data_sources.md.")
+        st.info("Arquivo distancias_regic.csv nao encontrado. A distancia e calculada dinamicamente via OSRM no simulador.")
 
 with tab3:
     st.subheader("Parametros do Calculo")
     st.markdown("**Veiculos**")
-    st.dataframe(veiculos_df)
+    st.dataframe(veiculos_df, use_container_width=True)
     st.markdown("**Tipos de Carga**")
-    st.dataframe(cargas_df)
+    st.dataframe(cargas_df, use_container_width=True)
     st.markdown("**Modais**")
-    st.dataframe(modal_df)
+    st.dataframe(modal_df, use_container_width=True)
     st.markdown("**Adicionais**")
-    st.dataframe(adicionais)
+    st.dataframe(adicionais, use_container_width=True)
